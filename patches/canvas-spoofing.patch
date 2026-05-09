@@ -179,15 +179,15 @@ diff --git a/dom/base/moz.build b/dom/base/moz.build
 index xxxxxxxxxx..yyyyyyyyyy 100644
 --- a/dom/base/moz.build
 +++ b/dom/base/moz.build
-@@ -144,7 +144,8 @@ EXPORTS.mozilla.dom += [
-     "AnimationFrameProvider.h",
-     "AnonymousContent.h",
-     "Attr.h",
-     "AudioFingerprintManager.h",
+@@ -151,7 +151,8 @@ EXPORTS.mozilla.dom += [
+     "BodyConsumer.h",
+     "BodyUtil.h",
+     "BorrowedAttrInfo.h",
+     "CacheExpirationTime.h",
 +    "CanvasFingerprintManager.h",
-     "AutoPrintEventDispatcher.h",
-     "AutoSuppressEventHandlingAndSuspend.h",
-     "BarProps.h",
+     "CCGCScheduler.h",
+     "CharacterData.h",
+     "CharacterDataBuffer.h",
 @@ -541,5 +542,9 @@ SOURCES += [
      "nsPluginArray.cpp",
  ]
