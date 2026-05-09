@@ -431,7 +431,9 @@ window.setWebGLRenderer('Intel Iris OpenGL Engine');  // UNMASKED_RENDERER_WEBGL
 
 **Controls:** Canvas 2D fingerprint hash — websites draw text, shapes, and gradients on a canvas, then call `toDataURL()` or `getImageData()` to hash the pixel output. GPU, driver, and font rendering differences make this hash highly unique.
 
-**How it works:** Stores a seed per context via `CanvasFingerprintManager`, then hooks both canvas data extraction paths in `CanvasRenderingContext2D.cpp`:
+**Status:** Generic canvas noise is opt-in and disabled by default through `canvas:noise_enabled=false` / omitted. It was previously removed because always-on noise is detectable by repeated canvas reads. This patch restores the browser-level seed plumbing as a controlled path for RenderLab experiments and for explicitly requested deterministic noise, not as the default production strategy.
+
+**How it works:** Stores a seed per context via `CanvasFingerprintManager`, then hooks both canvas data extraction paths in `CanvasRenderingContext2D.cpp` when `canvas:noise_enabled` is true:
 - `GetImageBuffer()` — used by `toDataURL()` and `toBlob()`, returns pixels in **BGRA** format
 - `GetImageData()` — used by `ctx.getImageData()`, returns pixels in **RGBA** format
 
@@ -448,6 +450,11 @@ The noise algorithm is **format-agnostic**: for each selected pixel, it iterates
 **API:**
 ```javascript
 window.setCanvasSeed(55555555); // uint32 seed
+```
+
+**Global opt-in:**
+```json
+{ "canvas:noise_enabled": true, "canvas:seed": 55555555 }
 ```
 
 **New C++ files:** `CanvasFingerprintManager.h/cpp`

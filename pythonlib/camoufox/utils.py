@@ -409,6 +409,7 @@ def launch_options(
     addons: Optional[List[str]] = None,
     fonts: Optional[List[str]] = None,
     custom_fonts_only: Optional[bool] = None,
+    canvas_noise: Optional[bool] = None,
     exclude_addons: Optional[List[DefaultAddons]] = None,
     screen: Optional[Screen] = None,
     window: Optional[Tuple[int, int]] = None,
@@ -468,6 +469,10 @@ def launch_options(
             Takes a list of font family names that are installed on the system.
         custom_fonts_only (Optional[bool]):
             If enabled, OS-specific system fonts will be not be passed to Camoufox.
+        canvas_noise (Optional[bool]):
+            Enables deterministic canvas pixel noise. Disabled by default because
+            generic canvas noise is detectable; prefer measured RenderLab targets
+            when available.
         exclude_addons (Optional[List[DefaultAddons]]):
             Default addons to exclude. Passed as a list of camoufox.DefaultAddons enums.
         screen (Optional[Screen]):
@@ -646,6 +651,8 @@ def launch_options(
     set_into(config, 'fonts:spacing_seed', randint(1, 4_294_967_295))  # nosec
     set_into(config, 'audio:seed', randint(1, 4_294_967_295))  # nosec
     set_into(config, 'canvas:seed', randint(1, 4_294_967_295))  # nosec
+    if canvas_noise is not None:
+        set_into(config, 'canvas:noise_enabled', canvas_noise)
 
     # Set geolocation
     if geoip:
