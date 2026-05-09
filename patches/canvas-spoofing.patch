@@ -3,7 +3,7 @@ new file mode 100644
 index 0000000000..f8b2a49c3d
 --- /dev/null
 +++ b/dom/base/CanvasFingerprintManager.cpp
-@@ -0,0 +1,132 @@
+@@ -0,0 +1,206 @@
 +/* Camoufox: Per-context canvas fingerprint manager */
 +#include "CanvasFingerprintManager.h"
 +
@@ -17,6 +17,19 @@ index 0000000000..f8b2a49c3d
 +
 +namespace mozilla {
 +namespace dom {
++
++static uint8_t PremultiplyChannel(uint8_t aValue, uint8_t aAlpha) {
++  if (aAlpha == 255) return aValue;
++  uint32_t value = uint32_t(aValue) * uint32_t(aAlpha) + 255u;
++  return static_cast<uint8_t>((value + (value >> 8)) >> 8);
++}
++
++static uint8_t UnpremultiplyChannel(uint8_t aValue, uint8_t aAlpha) {
++  if (aAlpha == 0 || aAlpha == 255) return aValue;
++  return static_cast<uint8_t>(
++      std::min<uint32_t>(255u,
++                         (uint32_t(aValue) * (0xFF00FFu / aAlpha)) >> 16));
++}
 +
 +nsString CanvasFingerprintManager::DisabledKeyForUserContext(uint32_t aId) {
 +  nsAutoString key;
@@ -85,6 +98,23 @@ index 0000000000..f8b2a49c3d
 +  return hash;
 +}
 +
++uint32_t CanvasFingerprintManager::HashPackedBGRAAsRGBA(const uint8_t* data,
++                                                        uint32_t length) {
++  uint32_t hash = 0x811c9dc5u;
++  for (uint32_t i = 0; i + 3 < length; i += 4) {
++    uint8_t a = data[i + 3];
++    uint8_t b = UnpremultiplyChannel(data[i], a);
++    uint8_t g = UnpremultiplyChannel(data[i + 1], a);
++    uint8_t r = UnpremultiplyChannel(data[i + 2], a);
++    uint8_t rgba[4] = {r, g, b, a};
++    for (uint8_t byte : rgba) {
++      hash ^= byte;
++      hash *= 0x01000193u;
++    }
++  }
++  return hash;
++}
++
 +bool CanvasFingerprintManager::ApplyCanvasReplay(uint8_t* data,
 +                                                  uint32_t length) {
 +  if (!IsReplayEnabled() || length == 0 || !data) return false;
@@ -117,6 +147,50 @@ index 0000000000..f8b2a49c3d
 +  return false;
 +}
 +
++bool CanvasFingerprintManager::ApplyCanvasReplayToPackedBGRA(uint8_t* data,
++                                                              uint32_t length) {
++  if (!IsReplayEnabled() || length == 0 || !data) return false;
++
++  std::vector<std::string> sourceHashes =
++      MaskConfig::GetStringList("canvas:replay_source_hashes");
++  std::vector<std::string> targetRasters =
++      MaskConfig::GetStringList("canvas:replay_target_rgba_base64");
++  if (sourceHashes.empty() || sourceHashes.size() != targetRasters.size()) {
++    return false;
++  }
++
++  nsAutoCString hash;
++  hash.AppendPrintf("%08x", HashPackedBGRAAsRGBA(data, length));
++
++  for (size_t i = 0; i < sourceHashes.size(); i++) {
++    if (sourceHashes[i] != hash.get()) continue;
++
++    nsAutoCString encoded(targetRasters[i].c_str());
++    nsAutoCString decoded;
++    if (NS_FAILED(mozilla::Base64Decode(encoded, decoded))) {
++      return false;
++    }
++    if (decoded.Length() != length) {
++      return false;
++    }
++
++    const uint8_t* target =
++        reinterpret_cast<const uint8_t*>(decoded.BeginReading());
++    for (uint32_t j = 0; j + 3 < length; j += 4) {
++      uint8_t r = target[j];
++      uint8_t g = target[j + 1];
++      uint8_t b = target[j + 2];
++      uint8_t a = target[j + 3];
++      data[j] = PremultiplyChannel(b, a);
++      data[j + 1] = PremultiplyChannel(g, a);
++      data[j + 2] = PremultiplyChannel(r, a);
++      data[j + 3] = a;
++    }
++    return true;
++  }
++  return false;
++}
++
 +void CanvasFingerprintManager::DisableFunction(uint32_t aId) {
 +  RoverfoxStorageManager::PutBool(DisabledKeyForUserContext(aId), true);
 +}
@@ -141,7 +215,7 @@ new file mode 100644
 index 0000000000..cfd812fc03
 --- /dev/null
 +++ b/dom/base/CanvasFingerprintManager.h
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,35 @@
 +/* Camoufox: Per-context canvas fingerprint manager */
 +#ifndef mozilla_dom_CanvasFingerprintManager_h
 +#define mozilla_dom_CanvasFingerprintManager_h
@@ -161,6 +235,7 @@ index 0000000000..cfd812fc03
 +  static uint32_t GetSeed(uint32_t aUserContextId);
 +  static void ApplyCanvasNoise(uint8_t* data, uint32_t length, uint32_t seed);
 +  static bool ApplyCanvasReplay(uint8_t* data, uint32_t length);
++  static bool ApplyCanvasReplayToPackedBGRA(uint8_t* data, uint32_t length);
 +  static bool IsReplayEnabled();
 +  static void DisableFunction(uint32_t aId);
 +  static bool IsFunctionEnabledForWebIDL(JSContext* aCx, JSObject* aObj);
@@ -168,6 +243,7 @@ index 0000000000..cfd812fc03
 + private:
 +  static bool IsNoiseEnabled();
 +  static uint32_t HashPixels(const uint8_t* data, uint32_t length);
++  static uint32_t HashPackedBGRAAsRGBA(const uint8_t* data, uint32_t length);
 +  static nsString DisabledKeyForUserContext(uint32_t aId);
 +};
 +
@@ -268,7 +344,7 @@ index xxxxxxxxxx..yyyyyyyyyy 100644
 +#include "nsPIDOMWindow.h"
  #include "ImageRegion.h"
  #include "LayerUserData.h"
-@@ -2287,5 +2290,35 @@ UniquePtr<uint8_t[]> CanvasRenderingContext2D::GetImageBuffer(
+@@ -2287,5 +2290,41 @@ UniquePtr<uint8_t[]> CanvasRenderingContext2D::GetImageBuffer(
          SurfaceFormat::A8R8G8B8_UINT32);
    }
  
@@ -295,10 +371,16 @@ index xxxxxxxxxx..yyyyyyyyyy 100644
 +      }
 +    }
 +    uint32_t canvasSeed = CanvasFingerprintManager::GetSeed(userContextId);
++    if (canvasSeed != 0 || CanvasFingerprintManager::IsReplayEnabled()) {
++      uint32_t length = out_imageSize->width * out_imageSize->height * 4;
++      if (CanvasFingerprintManager::ApplyCanvasReplayToPackedBGRA(
++              ret.get(), length)) {
++        return ret;
++      }
++    }
 +    if (canvasSeed != 0) {
 +      CanvasFingerprintManager::ApplyCanvasNoise(
-+          ret.get(), out_imageSize->width * out_imageSize->height * 4,
-+          canvasSeed);
++          ret.get(), out_imageSize->width * out_imageSize->height * 4, canvasSeed);
 +    }
 +  }
 +

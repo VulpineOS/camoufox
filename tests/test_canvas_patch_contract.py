@@ -21,6 +21,7 @@ class CanvasPatchContractTest(unittest.TestCase):
         self.assertIn("SetCanvasSeed", text)
         self.assertIn("ApplyCanvasNoise", text)
         self.assertIn("ApplyCanvasReplay", text)
+        self.assertIn("ApplyCanvasReplayToPackedBGRA", text)
         self.assertIn("Base64Decode", text)
         self.assertIn('MaskConfig::CheckBool("canvas:replay_enabled")', text)
         self.assertIn('MaskConfig::CheckBool("canvas:noise_enabled")', text)
