@@ -20,6 +20,9 @@ class CanvasPatchContractTest(unittest.TestCase):
         self.assertIn("CanvasFingerprintManager", text)
         self.assertIn("SetCanvasSeed", text)
         self.assertIn("ApplyCanvasNoise", text)
+        self.assertIn("ApplyCanvasReplay", text)
+        self.assertIn("Base64Decode", text)
+        self.assertIn('MaskConfig::CheckBool("canvas:replay_enabled")', text)
         self.assertIn('MaskConfig::CheckBool("canvas:noise_enabled")', text)
         self.assertIn("JS_GetUint8ClampedArrayData", text)
         self.assertIn("GetCurrentThreadWorkerPrivate", text)
@@ -30,7 +33,11 @@ class CanvasPatchContractTest(unittest.TestCase):
 
         self.assertEqual(properties["canvas:seed"], "uint")
         self.assertEqual(properties["canvas:noise_enabled"], "bool")
+        self.assertEqual(properties["canvas:replay_enabled"], "bool")
+        self.assertEqual(properties["canvas:replay_source_hashes"], "array")
+        self.assertEqual(properties["canvas:replay_target_rgba_base64"], "array")
         self.assertIn('"canvas:noise_enabled": "bool"', camoucfg)
+        self.assertIn('"canvas:replay_source_hashes": "array[str]"', camoucfg)
 
     def test_python_launch_options_exposes_canvas_noise_opt_in(self) -> None:
         utils = (ROOT / "pythonlib" / "camoufox" / "utils.py").read_text()

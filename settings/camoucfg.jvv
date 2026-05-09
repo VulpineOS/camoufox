@@ -80,6 +80,9 @@
     "audio:seed": "int[>=0]",
     "canvas:seed": "int[>=0]",
     "canvas:noise_enabled": "bool",
+    "canvas:replay_enabled": "bool",
+    "canvas:replay_source_hashes": "array[str]",
+    "canvas:replay_target_rgba_base64": "array[str]",
 
     "AudioContext:sampleRate": "int[>=0]",
     "AudioContext:outputLatency": "double[>=0]",

@@ -457,6 +457,19 @@ window.setCanvasSeed(55555555); // uint32 seed
 { "canvas:noise_enabled": true, "canvas:seed": 55555555 }
 ```
 
+**RenderLab replay path:** `getImageData()` can also replace RGBA output for
+known source hashes using a local RenderLab replay table. This path is disabled
+by default and is intended for controlled RenderLab scenes while the broader
+canvas model is being developed.
+
+```json
+{
+  "canvas:replay_enabled": true,
+  "canvas:replay_source_hashes": ["1a2b3c4d"],
+  "canvas:replay_target_rgba_base64": ["AAAA..."]
+}
+```
+
 **New C++ files:** `CanvasFingerprintManager.h/cpp`
 **Modified Firefox files:** `nsGlobalWindowInner.cpp/h`, `CanvasRenderingContext2D.cpp`, `Window.webidl`, `moz.build`
 

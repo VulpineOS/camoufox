@@ -3,12 +3,14 @@ new file mode 100644
 index 0000000000..f8b2a49c3d
 --- /dev/null
 +++ b/dom/base/CanvasFingerprintManager.cpp
-@@ -0,0 +1,84 @@
+@@ -0,0 +1,132 @@
 +/* Camoufox: Per-context canvas fingerprint manager */
 +#include "CanvasFingerprintManager.h"
 +
 +#include <algorithm>
++#include <cstring>
 +#include "MaskConfig.hpp"
++#include "mozilla/Base64.h"
 +#include "mozilla/dom/BrowsingContext.h"
 +#include "nsGlobalWindowInner.h"
 +#include "xpcpublic.h"
@@ -24,6 +26,10 @@ index 0000000000..f8b2a49c3d
 +
 +bool CanvasFingerprintManager::IsNoiseEnabled() {
 +  return MaskConfig::CheckBool("canvas:noise_enabled");
++}
++
++bool CanvasFingerprintManager::IsReplayEnabled() {
++  return MaskConfig::CheckBool("canvas:replay_enabled");
 +}
 +
 +void CanvasFingerprintManager::SetSeed(uint32_t aId, uint32_t aSeed) {
@@ -69,6 +75,48 @@ index 0000000000..f8b2a49c3d
 +  }
 +}
 +
++uint32_t CanvasFingerprintManager::HashPixels(const uint8_t* data,
++                                               uint32_t length) {
++  uint32_t hash = 0x811c9dc5u;
++  for (uint32_t i = 0; i < length; i++) {
++    hash ^= data[i];
++    hash *= 0x01000193u;
++  }
++  return hash;
++}
++
++bool CanvasFingerprintManager::ApplyCanvasReplay(uint8_t* data,
++                                                  uint32_t length) {
++  if (!IsReplayEnabled() || length == 0 || !data) return false;
++
++  std::vector<std::string> sourceHashes =
++      MaskConfig::GetStringList("canvas:replay_source_hashes");
++  std::vector<std::string> targetRasters =
++      MaskConfig::GetStringList("canvas:replay_target_rgba_base64");
++  if (sourceHashes.empty() || sourceHashes.size() != targetRasters.size()) {
++    return false;
++  }
++
++  nsAutoCString hash;
++  hash.AppendPrintf("%08x", HashPixels(data, length));
++
++  for (size_t i = 0; i < sourceHashes.size(); i++) {
++    if (sourceHashes[i] != hash.get()) continue;
++
++    nsAutoCString encoded(targetRasters[i].c_str());
++    nsAutoCString decoded;
++    if (NS_FAILED(mozilla::Base64Decode(encoded, decoded))) {
++      return false;
++    }
++    if (decoded.Length() != length) {
++      return false;
++    }
++    std::memcpy(data, decoded.BeginReading(), length);
++    return true;
++  }
++  return false;
++}
++
 +void CanvasFingerprintManager::DisableFunction(uint32_t aId) {
 +  RoverfoxStorageManager::PutBool(DisabledKeyForUserContext(aId), true);
 +}
@@ -93,7 +141,7 @@ new file mode 100644
 index 0000000000..cfd812fc03
 --- /dev/null
 +++ b/dom/base/CanvasFingerprintManager.h
-@@ -0,0 +1,30 @@
+@@ -0,0 +1,33 @@
 +/* Camoufox: Per-context canvas fingerprint manager */
 +#ifndef mozilla_dom_CanvasFingerprintManager_h
 +#define mozilla_dom_CanvasFingerprintManager_h
@@ -112,11 +160,14 @@ index 0000000000..cfd812fc03
 +  static void SetSeed(uint32_t aUserContextId, uint32_t aSeed);
 +  static uint32_t GetSeed(uint32_t aUserContextId);
 +  static void ApplyCanvasNoise(uint8_t* data, uint32_t length, uint32_t seed);
++  static bool ApplyCanvasReplay(uint8_t* data, uint32_t length);
++  static bool IsReplayEnabled();
 +  static void DisableFunction(uint32_t aId);
 +  static bool IsFunctionEnabledForWebIDL(JSContext* aCx, JSObject* aObj);
 +
 + private:
 +  static bool IsNoiseEnabled();
++  static uint32_t HashPixels(const uint8_t* data, uint32_t length);
 +  static nsString DisabledKeyForUserContext(uint32_t aId);
 +};
 +
@@ -253,7 +304,7 @@ index xxxxxxxxxx..yyyyyyyyyy 100644
 +
    return ret;
  }
-@@ -6615,5 +6647,38 @@ already_AddRefed<ImageData> CanvasRenderingContext2D::GetImageData(
+@@ -6615,5 +6647,41 @@ already_AddRefed<ImageData> CanvasRenderingContext2D::GetImageData(
    } while (false);
  
 +  // Per-context canvas fingerprint noise. Off by default unless explicitly
@@ -279,13 +330,16 @@ index xxxxxxxxxx..yyyyyyyyyy 100644
 +      }
 +    }
 +    uint32_t canvasSeed = CanvasFingerprintManager::GetSeed(userContextId);
-+    if (canvasSeed != 0) {
++    if (canvasSeed != 0 || CanvasFingerprintManager::IsReplayEnabled()) {
 +      JS::AutoCheckCannotGC nogc2;
 +      bool isShared2;
 +      uint8_t* pixelData =
 +          JS_GetUint8ClampedArrayData(darray, &isShared2, nogc2);
-+      CanvasFingerprintManager::ApplyCanvasNoise(pixelData, len.value(),
-+                                                  canvasSeed);
++      if (!CanvasFingerprintManager::ApplyCanvasReplay(pixelData, len.value()) &&
++          canvasSeed != 0) {
++        CanvasFingerprintManager::ApplyCanvasNoise(pixelData, len.value(),
++                                                    canvasSeed);
++      }
 +    }
 +  }
 +
